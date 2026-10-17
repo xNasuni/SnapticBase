@@ -1,4 +1,5 @@
 local LOADER = "autoloads/level_loader/level_loader"
+local GAME = "game/game"
 
 local function custom_levels(mod_id)
 	local dir = GDPatch.get_mod_directory(mod_id)
@@ -20,9 +21,9 @@ local function custom_levels(mod_id)
 	return levels
 end
 
-local function loader_path()
+local function script_path(base)
 	for _, file in ipairs(GDPatch.get_pack().files) do
-		if file == LOADER .. ".gdc" or file == LOADER .. ".gd" then
+		if file == base .. ".gdc" or file == base .. ".gd" then
 			return file
 		end
 	end
@@ -39,7 +40,7 @@ for _, mod in ipairs(GDPatch.get_mods()) do
 	end
 end
 
-local path = loader_path()
+local path = script_path(LOADER)
 
 if #levels == 0 then
 	return
@@ -65,3 +66,16 @@ GDPatch.patch_script_as_text(path, function(_, src)
 	end, 1)
 	return src
 end)
+
+local game_path = script_path(GAME)
+if game_path then
+	GDPatch.patch_script_as_text(game_path, function(_, src)
+		return (
+			src:gsub("(func%s+_ready%s*%([^)]*%)[^\n]*\n)", function(head)
+				return head .. "\tstarting_level = LevelLoader.LevelName.MIRRAXIS\n"
+			end, 1)
+		)
+	end)
+else
+	print("[snapticbase] game script not found in ther pack, couldn't force starting level")
+end
