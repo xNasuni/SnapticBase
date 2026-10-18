@@ -126,10 +126,6 @@ static func _dependency_problem(spec: String, installed: Dictionary) -> String:
 			break
 
 	var have := str(_meta(dep, "version", ""))
-	var shown := want
-	if op == "=" and want.ends_with(".x"):
-		want = want.trim_suffix(".x")
-		have = ".".join(have.split(".").slice(0, want.count(".") + 1))
 	var cmp := compare_versions(have, want)
 	var ok := false
 	match op:
@@ -137,10 +133,21 @@ static func _dependency_problem(spec: String, installed: Dictionary) -> String:
 		"<=": ok = cmp <= 0
 		">": ok = cmp > 0
 		"<": ok = cmp < 0
-		_: ok = cmp == 0
+		_: ok = version_matches(have, want)
 	if ok:
 		return ""
-	return "requires %s %s%s, found %s" % [dep, "" if op == "=" else op, shown, str(_meta(dep, "version", ""))]
+	return "requires %s %s%s, found %s" % [dep, "" if op == "=" else op, want, have]
+
+static func version_matches(version: String, pattern: String) -> bool:
+	if not pattern.ends_with(".x"):
+		return compare_versions(version, pattern) == 0
+
+	var prefix := pattern.trim_suffix(".x")
+
+	return compare_versions(".".join(version.split(".").slice(0, prefix.count(".") + 1)), prefix) == 0
+
+static func version_family(version: String) -> String:
+	return ".".join(version.trim_prefix("v").split("-")[0].split(".").slice(0, 2)) + ".x"
 
 
 static func compare_versions(a: String, b: String) -> int:
