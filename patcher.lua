@@ -1,5 +1,6 @@
 local LOADER = "autoloads/level_loader/level_loader"
 local GAME = "game/game"
+local CLICK_BUTTON = "levels/menu_screen_background/prefabs/click_button/click_button"
 
 local function custom_levels(mod_id)
 	local dir = GDPatch.get_mod_directory(mod_id)
@@ -27,6 +28,19 @@ local function script_path(base)
 			return file
 		end
 	end
+end
+
+local click_path = script_path(CLICK_BUTTON)
+if click_path then
+	GDPatch.patch_script_as_text(click_path, function(_, src)
+		return (
+			src:gsub("Cursor%.bind%(self, Cursors%.POINTING_HAND%)", function()
+				return "Cursor.bind_dynamic(self, func() -> CursorDefinition: return null if disabled else Cursors.POINTING_HAND)"
+			end, 1)
+		)
+	end)
+else
+	print("[snapticbase] click_button not found in the pack, cursor bug unfixezd")
 end
 
 local levels = {}

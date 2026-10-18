@@ -75,7 +75,9 @@ func add_back(text: String = "Back") -> Button:
 static func style_button(button: Button) -> Button:
 	button.set_script(load(CLICK_BUTTON))
 	button.pressed.connect(AudioManager.play_sound_effect.bind(SFX.Name.MENU_SELECT))
-	button.mouse_entered.connect(AudioManager.play_sound_effect.bind(SFX.Name.MENU_HOVER))
+	button.mouse_entered.connect(func() -> void:
+		if not button.disabled:
+			AudioManager.play_sound_effect(SFX.Name.MENU_HOVER))
 	return button
 
 
