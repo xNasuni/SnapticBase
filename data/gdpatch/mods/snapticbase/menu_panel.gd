@@ -78,6 +78,17 @@ static func style_button(button: Button) -> Button:
 	button.mouse_entered.connect(func() -> void:
 		if not button.disabled:
 			AudioManager.play_sound_effect(SFX.Name.MENU_HOVER))
+	button.set_meta(&"was_disabled", button.disabled)
+	button.draw.connect(func() -> void:
+		if button.disabled == button.get_meta(&"was_disabled"):
+			return
+
+		button.set_meta(&"was_disabled", button.disabled)
+		if Cursor.hot_rect(button).has_point(Cursor.get_position_in(button.get_viewport())):
+			button.mouse_exited.emit()
+			if not button.disabled:
+				button.mouse_entered.emit())
+
 	return button
 
 
