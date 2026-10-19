@@ -2,7 +2,7 @@ extends RefCounted
 
 signal changed(key: String, value: Variant)
 
-const DIR := "user://snaptic/settings/"
+const DIR := "user://snapticbase/settings/"
 const TYPES := [TYPE_BOOL, TYPE_STRING, TYPE_FLOAT, TYPE_COLOR]
 
 var _path: String
