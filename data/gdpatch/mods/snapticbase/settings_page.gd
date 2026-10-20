@@ -7,6 +7,7 @@ var _store
 var _style: Callable
 var _preview: Control
 var _panel: Control
+var _rows: Array[Dictionary] = []
 
 func setup(store, style: Callable, preview: Control, panel: Control) -> void:
 	_store = store
@@ -14,6 +15,8 @@ func setup(store, style: Callable, preview: Control, panel: Control) -> void:
 	_preview = preview
 	_panel = panel
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	_store.changed.connect(_on_changed)
 
 
 func add_toggle(label: String, key: String) -> CheckBox:
@@ -120,7 +123,10 @@ func _row(label: String, control: Control, key: String, refresh: Callable) -> vo
 		refresh.call()
 		reset.visible = not _store.is_default(key)
 	update.call()
-	_store.changed.connect(func(changed_key: String, _value: Variant) -> void:
-		if changed_key == key:
-			update.call())
+	_rows.append({"key": key, "update": update})
 	add_child(row)
+
+func _on_changed(changed_key: String, _value: Variant) -> void:
+	for row in _rows:
+		if row.key == changed_key:
+			row.update.call()
