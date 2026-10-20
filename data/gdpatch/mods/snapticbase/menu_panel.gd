@@ -18,6 +18,7 @@ var _under: Control
 var _menu_tween: Tween
 var _tween: Tween
 
+static var _showing := []
 
 func build(title: String, size: Vector2) -> void:
 	theme = load(THEME)
@@ -95,7 +96,9 @@ static func style_button(button: Button) -> Button:
 func open(under: Control = null) -> void:
 	if not is_inside_tree():
 		SettingsMenu.instance.get_parent().add_child(self)
-	_under = under
+	_showing = _showing.filter(func(panel) -> bool: return is_instance_valid(panel) and panel != self)
+	_under = under if under else (_showing.back() if not _showing.is_empty() else null)
+	_showing.append(self)
 	_menu = SnapticBase.menu
 	var duration := _duration()
 	var behind := _behind()
@@ -105,6 +108,8 @@ func open(under: Control = null) -> void:
 
 
 func close() -> void:
+	_showing.erase(self)
+
 	var duration := _duration()
 	var behind := _behind()
 	if behind:
@@ -114,6 +119,7 @@ func close() -> void:
 
 
 func dismiss() -> void:
+	_showing.erase(self)
 	_tween = Helpers.fade_control(self, _tween, false, _duration())
 
 
