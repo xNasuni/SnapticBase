@@ -90,7 +90,9 @@ func add_color(label: String, key: String) -> Button:
 	button.pressed.connect(func() -> void:
 		_panel.pick_color(_store.get_color(key),
 			func(color: Color) -> void: _store.set_value(key, color, false),
-			func(color: Color) -> void: _store.set_value(key, color)))
+			func(color: Color) -> void:
+				_store.set_value(key, color)
+				_store.save()))
 	_row(label, button, key, func() -> void:
 		swatch.bg_color = _store.get_color(key)
 		hover.bg_color = swatch.bg_color)
