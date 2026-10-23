@@ -19,7 +19,7 @@ static var _scene_hooks: Dictionary = {}
 static var _menu_queued := false
 static var _settings_stores := {}
 static var _settings_pages := {}
-static var _settings_panels := { }
+static var _settings_panels := {}
 static var _mods_menu: Control
 static var _configs := {}
 static var _startup_done := false
@@ -126,39 +126,100 @@ static func _dependency_problem(spec: String, installed: Dictionary) -> String:
 			break
 
 	var have := str(_meta(dep, "version", ""))
-	var cmp := compare_versions(have, want)
-	var ok := false
-	match op:
-		">=": ok = cmp >= 0
-		"<=": ok = cmp <= 0
-		">": ok = cmp > 0
-		"<": ok = cmp < 0
-		_: ok = version_matches(have, want)
-	if ok:
+	if _parse_version(have, false).is_empty():
+		return "%s has an invalid version '%s'" % [dep, have]
+	if _parse_version(want).is_empty():
+		return "invalid version requirement '%s' for %s" % [want, dep]
+	if version_satisfies(have, op, want):
 		return ""
 	return "requires %s %s%s, found %s" % [dep, "" if op == "=" else op, want, have]
 
+
+# this regex captures all the edge cases I can think of that might be used
+# hopefully I don't have to ever change this to not introduce anything backwards incompatible
+const _VERSION_RE := "^v?((?:\\d+|x)(?:\\.(?:\\d+|x))*)(\\*)?(?:-([^+*]*)(\\*)?)?(?:\\+([^*]*)(\\*)?)?$"
+
+static func _parse_version(text: String, allow_wildcards := true) -> Dictionary:
+	var re := RegEx.create_from_string(_VERSION_RE)
+	var m := re.search(text.strip_edges())
+	if m == null:
+		return {}
+	var v := {
+		"nums": m.get_string(1).split("."),
+		"any": m.get_start(2) != -1,
+		"has_label": m.get_start(3) != -1,
+		"label": m.get_string(3),
+		"label_glob": m.get_start(4) != -1,
+		"has_build": m.get_start(5) != -1,
+		"build": m.get_string(5),
+		"build_glob": m.get_start(6) != -1,
+	}
+	var wildcard: bool = v.any or v.label_glob or v.build_glob or "x" in v.nums
+	if wildcard and not allow_wildcards:
+		return {}
+	if not wildcard and ((v.has_label and v.label.is_empty()) or (v.has_build and v.build.is_empty())):
+		return {}
+	return v
+
+static func _part(v: Dictionary, i: int) -> String:
+	return v.nums[i] if i < v.nums.size() else "0"
+
+static func _tag_matches(want: String, glob: bool, have: String) -> bool:
+	return have.begins_with(want) if glob else have == want
+
+# public facing!
 static func version_matches(version: String, pattern: String) -> bool:
-	if not pattern.ends_with(".x"):
-		return compare_versions(version, pattern) == 0
+	var v := _parse_version(version, false)
+	var p := _parse_version(pattern)
+	if v.is_empty() or p.is_empty():
+		return false
 
-	var prefix := pattern.trim_suffix(".x")
+	for i in (p.nums.size() if p.any else maxi(p.nums.size(), v.nums.size())):
+		if _part(p, i) != "x" and int(_part(p, i)) != int(_part(v, i)):
+			return false
 
-	return compare_versions(".".join(version.split(".").slice(0, prefix.count(".") + 1)), prefix) == 0
+	if p.has_label:
+		if not v.has_label or not _tag_matches(p.label, p.label_glob, v.label):
+			return false
+	elif v.has_label and not p.any:
+		return false
+
+	return not p.has_build or (v.has_build and _tag_matches(p.build, p.build_glob, v.build))
+
+# the actual operator comparison
+static func version_satisfies(have: String, op: String, want: String) -> bool:
+	if op == "=":
+		return version_matches(have, want)
+	var v := _parse_version(have, false)
+	var p := _parse_version(want)
+	if v.is_empty() or p.is_empty() or (v.has_label and not p.has_label and not p.any):
+		return false
+	var cmp := compare_versions(have, want)
+	match op:
+		">=": return cmp >= 0
+		"<=": return cmp <= 0
+		">": return cmp > 0
+		"<": return cmp < 0
+	return false
+
 
 static func version_family(version: String) -> String:
-	return ".".join(version.trim_prefix("v").split("-")[0].split(".").slice(0, 2)) + ".x"
+	return ".".join(version.trim_prefix("v").split("+")[0].split("-")[0].split(".").slice(0, 2)) + ".x"
 
 
 static func compare_versions(a: String, b: String) -> int:
-	var pa := a.trim_prefix("v").split("-")[0].split(".")
-	var pb := b.trim_prefix("v").split("-")[0].split(".")
-	for i in maxi(pa.size(), pb.size()):
-		var x := int(pa[i]) if i < pa.size() else 0
-		var y := int(pb[i]) if i < pb.size() else 0
+	var pa := _parse_version(a)
+	var pb := _parse_version(b)
+	if pa.is_empty() or pb.is_empty():
+		return 0
+	for i in maxi(pa.nums.size(), pb.nums.size()):
+		var x := int(_part(pa, i)) if _part(pa, i) != "x" else 0
+		var y := int(_part(pb, i)) if _part(pb, i) != "x" else 0
 		if x != y:
 			return -1 if x < y else 1
-	return 0
+	if pa.has_label != pb.has_label:
+		return 1 if pb.has_label else -1
+	return signi(pa.label.naturalnocasecmp_to(pb.label))
 
 
 static func _meta(id: String, key: String, default: Variant) -> Variant:
