@@ -153,13 +153,14 @@ func _read_value() -> Variant:
 		return number.to_float()
 	if number.is_valid_hex_number(true):
 		return number.hex_to_int()
-	if token == "":
-		_fail("missing value")
-	return token
+	_fail("missing value" if token == "" else "invalid value `%s`" % token)
+	return null
 
 
 func _read_string() -> String:
 	var quote := _s[_i]
+	if _s.substr(_i, 3) == quote.repeat(3):
+		return _read_multiline_string(quote)
 	_i += 1
 	var start := _i
 	while _i < _s.length() and _s[_i] != quote and _s[_i] != "\n":
@@ -176,6 +177,58 @@ func _read_string() -> String:
 	var decoded = JSON.parse_string("\"" + raw + "\"")
 	return decoded if decoded is String else raw
 
+func _read_multiline_string(quote: String) -> String:
+	var delimiter := quote.repeat(3)
+	_i += 3
+	if _s.substr(_i, 2) == "\r\n":
+		_i += 2
+	elif _s.substr(_i, 1) == "\n":
+		_i += 1
+	var start := _i
+	while _i < _s.length() and _s.substr(_i, 3) != delimiter:
+		if quote == "\"" and _s[_i] == "\\":
+			_i += 1
+		_i += 1
+	if _i >= _s.length():
+		_fail("unterminated multiline string")
+		return ""
+	var extra := 0
+	while extra < 2 and _s.substr(_i + 3, 1) == quote:
+		_i += 1
+		extra += 1
+	var raw := _s.substr(start, _i - start).replace("\r\n", "\n")
+	_i += 3
+	if quote == "'":
+		return raw
+
+	var json := ""
+	var n := 0
+	while n < raw.length():
+		var ch := raw[n]
+		if ch == "\\":
+			var m := n + 1
+			while m < raw.length() and (raw[m] == " " or raw[m] == "\t"):
+				m += 1
+			if m < raw.length() and raw[m] == "\n":
+				while m < raw.length() and raw[m] in [" ", "\t", "\n"]:
+					m += 1
+				n = m
+			else:
+				json += raw.substr(n, 2)
+				n += 2
+			continue
+		match ch:
+			"\n":
+				json += "\\n"
+			"\t":
+				json += "\\t"
+			"\"":
+				json += "\\\""
+			_:
+				json += ch
+		n += 1
+	var decoded = JSON.parse_string("\"" + json + "\"")
+	return decoded if decoded is String else raw
 
 func _read_array() -> Array:
 	_i += 1
