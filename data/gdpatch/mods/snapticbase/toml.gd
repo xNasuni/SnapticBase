@@ -6,6 +6,7 @@ var _s := ""
 var _i := 0
 var _failed := false
 var _path := ""
+var _defined := {}
 
 
 static func parse_file(path: String) -> Dictionary:
@@ -23,6 +24,16 @@ static func parse(text: String) -> Dictionary:
 	return reader._parse()
 
 # adapted from an library this is probably passing the toml spec who knows it works
+func _assign(from: Dictionary, keys: Array, value: Variant) -> void:
+	var target := _open_table(from, keys.slice(0, keys.size() - 1), false)
+	if _failed:
+		return
+	var last: String = keys[keys.size() - 1]
+	if target.has(last):
+		_fail("duplicate key `%s`" % last)
+		return
+	target[last] = value
+
 func _parse() -> Dictionary:
 	var root := {}
 	var table := root
@@ -38,6 +49,15 @@ func _parse() -> Dictionary:
 			_expect("]")
 			if is_array:
 				_expect("]")
+			if is_array:
+				for defined in _defined.keys():
+					if defined.slice(0, keys.size()) == keys:
+						_defined.erase(defined)
+			elif _defined.has(keys):
+				_fail("duplicate key `%s`" % ".".join(keys))
+				break
+			else:
+				_defined[keys] = true
 			table = _open_table(root, keys, is_array)
 		else:
 			var keys := _read_keys()
@@ -45,8 +65,7 @@ func _parse() -> Dictionary:
 			var value = _read_value()
 			if _failed:
 				break
-			var target := _open_table(table, keys.slice(0, keys.size() - 1), false)
-			target[keys[keys.size() - 1]] = value
+			_assign(table, keys, value)
 	return root
 
 
@@ -55,7 +74,10 @@ func _open_table(from: Dictionary, keys: Array, is_array: bool) -> Dictionary:
 	for n in keys.size():
 		var key: String = keys[n]
 		if is_array and n == keys.size() - 1:
-			if not current.get(key) is Array:
+			if current.has(key) and not current[key] is Array:
+				_fail("duplicate key `%s`" % key)
+				return {}
+			if not current.has(key):
 				current[key] = []
 			var fresh := {}
 			current[key].append(fresh)
@@ -63,6 +85,9 @@ func _open_table(from: Dictionary, keys: Array, is_array: bool) -> Dictionary:
 		var next = current.get(key)
 		if next is Array and not next.is_empty():
 			next = next[next.size() - 1]
+		if current.has(key) and not next is Dictionary:
+			_fail("duplicate key `%s`" % key)
+			return {}
 		if not next is Dictionary:
 			next = {}
 			current[key] = next
@@ -184,7 +209,7 @@ func _read_inline_table() -> Dictionary:
 		var keys := _read_keys()
 		_expect("=")
 		var value = _read_value()
-		_open_table(table, keys.slice(0, keys.size() - 1), false)[keys[keys.size() - 1]] = value
+		_assign(table, keys, value)
 		_skip_blank()
 		if _i < _s.length() and _s[_i] == ",":
 			_i += 1
